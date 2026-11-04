@@ -12,8 +12,6 @@
     .msg { margin-top: 12px; padding: 10px; border-radius: 6px; display: none; }
     .ok  { background: #e7f7ef; color: #1a7f4f; }
     .err { background: #fdecec; color: #c0392b; }
-    
-    /* Estilo do link de voltar para o login */
     .link-login { display: block; text-align: center; margin-top: 15px; color: #3ecf8e; text-decoration: none; font-size: 14px; }
     .link-login:hover { text-decoration: underline; }
   </style>
@@ -21,66 +19,82 @@
 <body>
   <h2>Cadastro</h2>
   <form id="form">
-    <input id="usuario" placeholder="Usuário" required>
-    <input id="senha" type="password" placeholder="Senha" required>
+    <input id="usuario" placeholder="Usuário" required autocomplete="username">
+    <input id="senha" type="password" placeholder="Senha" required autocomplete="new-password">
     <textarea id="informacoes" placeholder="Informações (opcional)" rows="3"></textarea>
     <button type="submit" id="btn">Cadastrar</button>
   </form>
-  
+
   <div id="msg" class="msg"></div>
-  
-  <!-- Link para voltar ao login -->
-  <a href="login.html" class="link-login">Já tem uma conta? Faça login</a>
- 
-  <!-- Importando o Supabase -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
- 
+
+  <a href="index.html" class="link-login">Já tem uma conta? Faça login</a>
+
   <script>
-    // Suas credenciais do Supabase
-    const SUPABASE_URL = 'https://etmucxjxoljxknfxigxj.supabase.co';   
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0bXVjeGp4b2xqeGtuZnhpZ3hqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MjYxMzYsImV4cCI6MjEwNTAwMjEzNn0.YSXOLNYSVvy8RCPYVcl6jalEzEm6eeDSSAV2gnS0ea0';       
-      
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
- 
+    // Mesmo hash do login — mantenha as duas funções iguais
+    async function hashSenha(senha) {
+      if (window.crypto && crypto.subtle) {
+        const buf = new TextEncoder().encode(senha);
+        const digest = await crypto.subtle.digest('SHA-256', buf);
+        return Array.from(new Uint8Array(digest))
+          .map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+      let h = 0;
+      for (let i = 0; i < senha.length; i++) h = (h * 31 + senha.charCodeAt(i)) | 0;
+      return 'simple_' + (h >>> 0).toString(16);
+    }
+
+    function uuid() {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+      return 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    }
+
     const form = document.getElementById('form');
     const msg  = document.getElementById('msg');
     const btn  = document.getElementById('btn');
- 
+
     function showMsg(text, ok) {
       msg.textContent = text;
       msg.className = 'msg ' + (ok ? 'ok' : 'err');
       msg.style.display = 'block';
     }
- 
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       btn.disabled = true;
-      msg.style.display = 'none'; // Esconde mensagens anteriores
- 
+      msg.style.display = 'none';
+
       const usuario     = document.getElementById('usuario').value.trim();
-      const senhaPura   = document.getElementById('senha').value;
+      const senha       = document.getElementById('senha').value;
       const informacoes = document.getElementById('informacoes').value.trim();
- 
-      // Chamando a RPC no Supabase
-      const { data, error: selectError } = await supabaseClient
-        .rpc('register_user', {
-          p_usuario: usuario,
-          p_senha: senhaPura,
-          p_informacao: informacoes
+
+      try {
+        if (usuario.length < 3) { showMsg('Usuário muito curto (mín. 3 caracteres).', false); return; }
+        if (senha.length   < 4) { showMsg('Senha muito curta (mín. 4 caracteres).',   false); return; }
+
+        const usuarios = JSON.parse(localStorage.getItem('usuarios_registrados') || '[]');
+        if (usuarios.some(u => u.usuario === usuario)) {
+          showMsg('Este usuário já existe.', false);
+          return;
+        }
+
+        const senha_hash = await hashSenha(senha);
+        usuarios.push({
+          id: uuid(),
+          usuario,
+          senha_hash,
+          informacoes,
+          criado_em: new Date().toISOString()
         });
- 
-      btn.disabled = false;
- 
-      if (selectError) {
-        showMsg('Erro: ' + selectError.message, false);
-        console.error('Erro retornado pela RPC:', selectError);
-      } else {
+        localStorage.setItem('usuarios_registrados', JSON.stringify(usuarios));
+
         showMsg('Cadastro realizado com sucesso! Redirecionando...', true);
         form.reset();
-        
-        setTimeout(() => {
-            window.location.href = 'index.html';
-        }, 2000); 
+        setTimeout(() => window.location.href = 'index.html', 1500);
+      } catch (err) {
+        console.error(err);
+        showMsg('Erro: ' + err.message, false);
+      } finally {
+        btn.disabled = false;
       }
     });
   </script>

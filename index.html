@@ -19,72 +19,70 @@
 <body>
   <h2>Login</h2>
   <form id="loginForm">
-    <input id="usuario" placeholder="Usuário" required>
-    <input id="senha" type="password" placeholder="Senha" required>
+    <input id="usuario" placeholder="Usuário" required autocomplete="username">
+    <input id="senha" type="password" placeholder="Senha" required autocomplete="current-password">
     <button type="submit" id="btn">Entrar</button>
   </form>
   <div id="msg" class="msg"></div>
-  
+
   <a href="senha-hash.html" class="link-cadastro">Não tem uma conta? Cadastre-se</a>
- 
-  <!-- Importando o Supabase -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
- 
+
   <script>
-    // Suas credenciais do Supabase (as mesmas do cadastro)
-    const SUPABASE_URL = 'https://etmucxjxoljxknfxigxj.supabase.co';   
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0bXVjeGp4b2xqeGtuZnhpZ3hqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0MjYxMzYsImV4cCI6MjEwNTAwMjEzNn0.YSXOLNYSVvy8RCPYVcl6jalEzEm6eeDSSAV2gnS0ea0';       
-      
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
- 
+    // ---------- Helpers compartilhados ----------
+    async function hashSenha(senha) {
+      if (window.crypto && crypto.subtle) {
+        const buf = new TextEncoder().encode(senha);
+        const digest = await crypto.subtle.digest('SHA-256', buf);
+        return Array.from(new Uint8Array(digest))
+          .map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+      // Fallback (file:// sem HTTPS) — não é seguro, apenas para testes locais
+      let h = 0;
+      for (let i = 0; i < senha.length; i++) h = (h * 31 + senha.charCodeAt(i)) | 0;
+      return 'simple_' + (h >>> 0).toString(16);
+    }
+
     const form = document.getElementById('loginForm');
     const msg  = document.getElementById('msg');
     const btn  = document.getElementById('btn');
- 
+
     function showMsg(text, ok) {
       msg.textContent = text;
       msg.className = 'msg ' + (ok ? 'ok' : 'err');
       msg.style.display = 'block';
     }
- 
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       btn.disabled = true;
       msg.style.display = 'none';
- 
-      const usuario   = document.getElementById('usuario').value.trim();
-      const senhaPura = document.getElementById('senha').value;
- 
-      // Chamando a RPC de login
-      const { data, error: selectError } = await supabaseClient
-        .rpc('login_user', {
-          p_usuario: usuario,
-          p_senha: senhaPura
-        });
- 
-      btn.disabled = false;
- 
-      if (selectError) {
-        showMsg('Erro de conexão: ' + selectError.message, false);
-        return;
-      }
-      
-      if (data && data.success === false) {
-        showMsg(data.message, false);
-        return;
-      }
 
-      // LOGIN COM SUCESSO!
-      showMsg('Login realizado! Redirecionando...', true);
-      
-      localStorage.setItem('usuario_logado', JSON.stringify({
-        id: data.user_id,
-        nome: data.usuario
-      }));
+      const usuario = document.getElementById('usuario').value.trim();
+      const senha   = document.getElementById('senha').value;
 
-      setTimeout(() => {
-        window.location.href = 'mapa.html'; 
-      }, 1500);
+      try {
+        const hash = await hashSenha(senha);
+        const usuarios = JSON.parse(localStorage.getItem('usuarios_registrados') || '[]');
+        const user = usuarios.find(u => u.usuario === usuario && u.senha_hash === hash);
+
+        if (!user) {
+          showMsg('Usuário ou senha inválidos.', false);
+          return;
+        }
+
+        localStorage.setItem('usuario_logado', JSON.stringify({
+          id: user.id,
+          nome: user.usuario
+        }));
+
+        showMsg('Login realizado! Redirecionando...', true);
+        setTimeout(() => window.location.href = 'mapa.html', 1000);
+      } catch (err) {
+        console.error(err);
+        showMsg('Erro: ' + err.message, false);
+      } finally {
+        btn.disabled = false;
+      }
     });
   </script>
 </body>
